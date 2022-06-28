@@ -1,0 +1,47 @@
+<html>
+<title>Command Centre</title>
+<link href="styles.css" rel="stylesheet">
+<body>
+<div id="header" class="header"></div>
+<script
+    src="https://code.jquery.com/jquery-3.3.1.js"
+    integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+    crossorigin="anonymous">
+</script>
+<script>
+$(function(){
+    $("#header").load("header.html"); 
+});
+</script>
+<script src="./plotly.js"></script>
+<script src="./math.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+
+
+<!-- <p><a href="command_centre.html">Command Centre</a> -->
+</body>
+
+<div class="app-controls">
+<div class="inner-app-controls">
+<button class="add-plot" onclick="addPlot()">Add</button>
+<select id="plot-ip-address" class="dropdown-traces"></select>
+<select id="plot-type-select" class="dropdown-traces">
+    <option value="scatter">Line</option>
+    <option value="heatmap">Heatmap</option>
+</select>
+Sync: <input type="checkbox" id="checkbox-synchronise" onclick="toggleSynchronisation()">
+</div>
+</div>
+
+<div class='all-plots-container' id='plots'></div>
+
+<!-- div with messages -->
+<div id="messages"></div>
+<script src="./blob.js"></script>
+<script src="./core.js"></script>
+<div id="root"></div>
+
+</html>

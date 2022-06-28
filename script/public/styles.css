@@ -1,0 +1,136 @@
+body {
+  margin: 3%;
+  background-color: #448ce5;
+}
+
+.header {
+display: flex;
+justify-content: center;
+  margin: 2%;
+}
+
+div.inner-app-controls
+{
+  float:none;
+  top: 50%;
+  transform: translate(0, 10%);
+}
+
+div.app-controls {
+  background-color: white;
+  height: 50;
+  text-align: center;
+  background-color: white;
+  box-shadow: 0px 8px 16px 0px rgb(0 0 0);
+  border-radius: 05px;
+  width: 85%;
+  margin-left: 7.5%;
+  border: black;
+  border-width: thick;
+}
+
+a.header-links {
+background-color: white;
+box-shadow: 0 5px 0 rgb(20, 20, 233);
+color: black;
+padding: 1em 1.5em;
+position: relative;
+text-decoration: none;
+text-transform: uppercase;
+border: 2px solid skyblue;
+margin: auto;
+border-radius: 4px;
+}
+
+a.header-links:hover {
+background-color: skyblue;
+color: white;
+cursor: pointer;
+}
+
+button.add-plot {
+  background-color: white;
+  color: black;
+  text-decoration: none;
+  /* font-size: 34px; */
+  text-align: center;
+  padding: 10px 20px;
+  border: 2px solid skyblue;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+button.add-plot {
+transition-duration: 0.4s;
+}
+
+button.add-plot:hover {
+background-color: skyblue; /* Green */
+color:white;
+
+}
+
+div.plot-container-upper {
+width: 97%;
+height: 530;
+margin: 1.5%;
+text-align: center;
+}
+
+div.all-plots-container {
+background-color: white;
+box-shadow: 0px 8px 16px 0px rgb(0 0 0);
+border-radius: 15px;
+}
+
+div.plot-config {
+display: flex;
+justify-content: center;
+height: 10%;
+}
+
+select.dropdown-traces {
+background-color: white;
+color: black;
+padding: 10px;
+font-size: 16px;
+border: black;
+cursor: pointer;
+width: 40%;
+}
+
+
+/* The container <div> - needed to position the dropdown content */
+option.dropdown-option {
+position: relative;
+display: inline-block;
+}
+
+/* Dropdown Content (Hidden by Default) */
+option.dropdown-option {
+position: absolute;
+background-color: white;
+min-width: 160px;
+box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+z-index: 1;
+}
+
+button.add-trace {
+  background-color: white;
+  color: black;
+  font-size: 12px;
+  text-align: center;
+  padding: 10px 20px;
+  border: 2px solid skyblue;
+  cursor: pointer;
+  margin-left: 1%;
+  margin-right: 1%;
+}
+button.add-trace {
+transition-duration: 0.4s;
+}
+
+button.add-trace:hover {
+background-color: skyblue; /* Green */
+color: black;
+}
