@@ -4,15 +4,19 @@ var path = require('path');
 const WebSocketServer = require('websocket').server;
 var port = 8000;
 var host = '0.0.0.0';
-var data = [];
 var web_clients = [];
 
 server = http.createServer(function (request, response) {
 
     var filePath = '.' + request.url;
-    if (filePath == './')
-       filePath = './index.html';
-
+    if ((filePath == './'))
+    {
+        filePath = './index.html';
+    }
+    else
+    {
+        filePath = './' + request.url;
+    }
     var extName = path.extname(filePath);
     var contentType = 'text/html';
     switch (extName) {
