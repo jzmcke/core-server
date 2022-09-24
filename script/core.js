@@ -35,6 +35,14 @@ function update_n_points()
     }
 }
 
+function appendBuffer(buf1, buf2)
+{
+    var tmp = new Uint8Array(buf1.byteLength + buf2.byteLength);
+    tmp.set(new Uint8Array(buf1), 0);
+    tmp.set(new Uint8Array(buf2), buf1.byteLength);
+    return tmp;
+}
+
 class Plot
 {
     constructor(plot_type, plot_id, trace_options)
@@ -162,11 +170,10 @@ class Plot
 
     addData(in_data, epoch_ms)
     {
-        
         var index = 0;
         var trace;
         var trace_idx = 0;
-
+        // Populate the new sample with a repeat of the last sample
         if (in_data == null)
         {
             in_data = this.last_data;
@@ -185,22 +192,48 @@ class Plot
             }
             if (this.plot_type == 'scatter')
             {
-                data = this_var[0][0];
+                //data = this_var[0][0];
+                //this.plot_data[trace_idx].push(data);
+                var plot_data, ele;
+                var i=this_var[0].length-1;
+                data = this_var[0];
+                
+                var epoch_step_ms;
+                
+                if (this.epoch_ms.length > 0)
+                {
+                    var last_epoch = this.epoch_ms[this.epoch_ms.length-1];
+                    epoch_step_ms = (last_epoch - epoch_ms) / this.epoch_ms.length;
+                }
+                else
+                {
+                    epoch_step_ms = 1;
+                }
+                
+                for (ele of data)
+                {
+                    this.plot_data[trace_idx].push(ele);
+                    this.epoch_ms.push(epoch_ms - i * epoch_step_ms)
+                    i=i-1;
+                }
             }
             else if (this.plot_type == 'heatmap')
             {
                 data = this_var[0];
+                this.plot_data[trace_idx].push(data);
+                this.epoch_ms.push(epoch_ms);
             }
-            this.plot_data[trace_idx].push(data);
-            
             index = index + 1;
             trace_idx = trace_idx + 1;
         }
-        this.epoch_ms.push(epoch_ms);
-        this.data_added_since_plot = this.data_added_since_plot + 1;
-        if (this.data_added_since_plot >= this.update_count_thresh)
+        
+        if (this.traces.length > 0)
         {
-            this.plot()
+            this.data_added_since_plot = this.data_added_since_plot + 1;
+            if (this.data_added_since_plot >= this.update_count_thresh)
+            {
+                this.plot()
+            }
         }
     }
 
@@ -257,15 +290,15 @@ class Plot
                 while (remove_idx >= 0)
                 {
                     const is_outside_range = (epoch_ms) => epoch_ms < -1000 * this.time_len_secs;
-                    remove_idx = epoch_adj.findIndex(is_outside_range);
+                    remove_idx = epoch_adj.findLastIndex(is_outside_range);
                     if (remove_idx != -1)
                     {
                         var i = 0;
-                        epoch_adj.splice(remove_idx, 1);
-                        this.epoch_ms.splice(remove_idx, 1);
+                        epoch_adj.splice(0, remove_idx+1);
+                        this.epoch_ms.splice(0, remove_idx+1);
                         for (trace of this.traces)
                         {
-                            this.plot_data[i].splice(remove_idx, 1);
+                            this.plot_data[i].splice(0, remove_idx+1);
                             i += 1;
                         }
                     }
