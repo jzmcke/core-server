@@ -1,10 +1,73 @@
 var http = require('http');
 var fs = require('fs');
 var path = require('path');
+var udp = require('dgram');
+
+
 const WebSocketServer = require('websocket').server;
 var port = 8000;
 var host = '0.0.0.0';
 var web_clients = [];
+
+var udp_clients = [];
+
+// creating a udp server
+var udpserver = udp.createSocket('udp4');
+var udpport = 1234;
+
+
+//emits when socket is ready and listening for datagram msgs
+udpserver.on('listening',function(){
+    var address = udpserver.address();
+    var port = address.port;
+    var family = address.family;
+    var ipaddr = address.address;
+    console.log(`UDP server is running on http://${ipaddr}:${port}`);
+});
+
+udpserver.on('message', (msg, rinfo) => {
+    // console.log(`server got UDP msg: ${msg} from ${rinfo.address}:${rinfo.port}`);
+    console.log(`server got UDP msg of size ${msg.length}`);
+    var b_found = false;
+    /* Check if new client */
+    udp_clients.forEach(function(client) {
+        if (rinfo['address'] == client['address'])
+        {
+            b_found = true;
+        }
+    });
+    if (!b_found)
+    {
+        udp_clients.push(rinfo)
+    }
+
+    function forward_to_ws(msg, client) {
+        var ip = Buffer.from(rinfo['address']);
+        var cat_buf = Buffer.alloc(128 - ip.length);
+        var send_buf = Buffer.concat([ip, cat_buf, msg]);
+
+        client.send(send_buf);
+        console.log("forwarding udp to ws msg " + count);
+    }
+    /* Forward packets to the web-socket clients */
+    web_clients.forEach(forward_to_ws.bind(null, msg));
+
+    function forward_to_udp(client, msg, rinfo) {
+        if (rinfo['address'] != client['address'])
+        {
+            var ip = Buffer.from(rinfo['address']);
+            var cat_buf = Buffer.alloc(128 - ip.length);
+            var send_buf = Buffer.concat([ip, cat_buf, msg]);
+
+            udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
+            console.log("forwarding udp to udp msg " + send_buf.length);
+        }
+    }
+    /* Forward packets to the web-socket clients */
+    udp_clients.forEach(forward_to_udp.bind(null, rinfo, msg));
+});
+
+udpserver.bind(udpport);
 
 server = http.createServer(function (request, response) {
 
@@ -55,7 +118,7 @@ server = http.createServer(function (request, response) {
 });
 
 server.listen(port, host, () => {
-    console.log(`Server is running on http://${host}:${port}`);
+    console.log(`Websocket server is running on http://${host}:${port}`);
 });
 
 const wsServer = new WebSocketServer({httpServer: server})
@@ -65,20 +128,34 @@ wsServer.on('request', function(request) {
     const connection = request.accept(null, request.origin);
     console.log('Connection request received.')
     web_clients.push(connection);
-    connection.on('message', function(message) {       
+    connection.on('message', function(message) {      
+        console.log(`server got ws msg of size ${message.binaryData.length}`); 
         web_clients.forEach(function(client) {
             if (client != connection)
             {
-                
                 var ip = Buffer.from(connection.remoteAddress);
                 var cat_buf = Buffer.alloc(128 - ip.length);
                 var send_buf = Buffer.concat([ip, cat_buf, message.binaryData]);
 
                 client.send(send_buf);
-                console.log("forwarding " + count);
+                // console.log("forwarding websocket msg " + count);
             }
         });
-        count = count + 1;
+
+        function forward_to_udp(conn, msg, client) {
+            if (conn.remoteAddress != client['address'])
+            {
+                var ip = Buffer.from(conn.remoteAddress);
+                var cat_buf = Buffer.alloc(128 - ip.length);
+                var send_buf = Buffer.concat([ip, cat_buf, msg]);
+    
+                udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
+                console.log("forwarding ws to udp msg " + send_buf.length);
+            }
+        }
+        /* Forward packets to the web-socket clients */
+        udp_clients.forEach(forward_to_udp.bind(null, connection, message.binaryData));
+
     });
 
     connection.on('close', function(reasonCode, description) {
