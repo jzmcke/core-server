@@ -35,6 +35,14 @@ function update_n_points()
     }
 }
 
+function appendBuffer(buf1, buf2)
+{
+    var tmp = new Float32Array(buf1.length + buf2.length);
+    tmp.set(new Float32Array(buf1), 0);
+    tmp.set(new Float32Array(buf2), buf1.length);
+    return tmp;
+}
+
 class Plot
 {
     constructor(plot_type, plot_id, trace_options)
@@ -145,8 +153,17 @@ class Plot
         this.epoch_ms = [];
         for (trace of this.traces)
         {
-            this.plot_data.push([]);
+            if (this.plot_type == "heatmap")
+            {
+                this.plot_data.push([]);
+            }
+            else if (this.plot_type == "scatter")
+            {
+                // Scatter plots use ArrayBuffers as the type
+                this.plot_data.push(new Float32Array(new ArrayBuffer([])))
+            }
             this.indices.push(this.n_traces);
+            this.epoch_ms.push([])
         }
         this.b_relayout = false;
         this.b_trigger_relayout = false;
@@ -157,12 +174,13 @@ class Plot
         Plotly.addTraces('plot-' + this.plot_id, {y: [], name: dropdown.value});
         this.traces.push(dropdown.value);
         this.resetTraces();
+        this.epoch_ms.push([])
         this.n_traces = this.n_traces + 1;
     }
 
     addData(in_data, epoch_ms)
     {
-        
+        // This only works for 1D data (for scatter plots) or a single element list of 1D data (for heatmaps or other 2D data)        
         var index = 0;
         var trace;
         var trace_idx = 0;
@@ -183,20 +201,26 @@ class Plot
             {
                 this_var = this_var[scope];
             }
-            if (this.plot_type == 'scatter')
-            {
-                data = this_var[0][0];
-            }
-            else if (this.plot_type == 'heatmap')
-            {
-                data = this_var[0];
-            }
-            this.plot_data[trace_idx].push(data);
             
+            // For heatmaps, assemble a list of 1D arrays. Otherwise, append the array buffers.
+            if (this.plot_type == "heatmap")
+            {
+                this.plot_data[trace_idx].push(this_var[0]);
+                this.epoch_ms[trace_idx].push(epoch_ms);
+            }
+            else
+            {
+                this.plot_data[trace_idx] = appendBuffer(this.plot_data[trace_idx], this_var[0])
+                for (let samp of this_var[0])
+                {
+                    this.epoch_ms[trace_idx].push(epoch_ms)
+                }
+            }
+
             index = index + 1;
             trace_idx = trace_idx + 1;
         }
-        this.epoch_ms.push(epoch_ms);
+        
         this.data_added_since_plot = this.data_added_since_plot + 1;
         if (this.data_added_since_plot >= this.update_count_thresh)
         {
@@ -209,18 +233,9 @@ class Plot
         var indices = [];
         var trace;
         var i = 0;
-        var epoch_adj = [];
+        
         var epoch;
-        /* Reference to 0 epoch. Latest sample should be 0-time */
-        for (epoch of this.epoch_ms)
-        {
-            var diff = epoch - this.epoch_ms[this.epoch_ms.length - 1];
-            epoch_adj.push(diff);
-            if (diff <= -this.time_len_secs * 1000 & !this.b_relayout)
-            {
-                this.b_trigger_relayout = true;
-            }
-        }
+        
         for (trace of this.plot_data)
         {
             indices.push(i);
@@ -239,41 +254,52 @@ class Plot
             }
             else
             {
-                if (this.b_trigger_relayout)
-                {
-                    Plotly.relayout('plot-' + this.plot_id, {'xaxis.range': [-1000 * this.time_len_secs, 0]});
-                    this.b_relayout = true;
-                    this.b_trigger_relayout = false;
-                }
-                else if (!this.b_relayout)
-                {
-                    Plotly.relayout('plot-' + this.plot_id, {'xaxis.range': [epoch_adj[0], 0]})
-                }
+                // if (this.b_trigger_relayout)
+                // {
+                //     Plotly.relayout('plot-' + this.plot_id, {'xaxis.range': [-1000 * this.time_len_secs, 0]});
+                //     this.b_relayout = true;
+                //     this.b_trigger_relayout = false;
+                // }
+                // else if (!this.b_relayout)
+                // {
+                //     Plotly.relayout('plot-' + this.plot_id, {'xaxis.range': [epoch_adj[0], 0]})
+                // }
                 
                 let trace;
-
-                /* Remove elements while time since the recently added point is greater than this.time_len */
-                var remove_idx = 0;
-                while (remove_idx >= 0)
+                
+                var i = 0;
+                for (trace of this.traces)
                 {
-                    const is_outside_range = (epoch_ms) => epoch_ms < -1000 * this.time_len_secs;
-                    remove_idx = epoch_adj.findIndex(is_outside_range);
-                    if (remove_idx != -1)
+                    var epoch_adj = [];
+                    /* Reference to 0 epoch. Latest sample should be 0-time */
+                    for (epoch of this.epoch_ms[i])
                     {
-                        var i = 0;
-                        epoch_adj.splice(remove_idx, 1);
-                        this.epoch_ms.splice(remove_idx, 1);
-                        for (trace of this.traces)
+                        var diff = epoch - this.epoch_ms[i][this.epoch_ms[i].length - 1];
+                        epoch_adj.push(diff);
+                        if (diff <= -this.time_len_secs * 1000 & !this.b_relayout)
                         {
-                            this.plot_data[i].splice(remove_idx, 1);
-                            i += 1;
+                            this.b_trigger_relayout = true;
                         }
                     }
+
+                    /* Remove elements while time since the recently added point is greater than this.time_len
+                       Dont need while loop here if using findLastIndex */
+                    var remove_idx = 0;
+                    while (remove_idx >= 0)
+                    {
+                        const is_outside_range = (epoch_ms) => epoch_ms < -1000 * this.time_len_secs;
+                        remove_idx = epoch_adj.findLastIndex(is_outside_range);
+                        if (remove_idx != -1)
+                        {
+                            epoch_adj = epoch_adj.slice(remove_idx+1);
+                            this.epoch_ms[i] = this.epoch_ms[i].slice(remove_idx+1);
+                            this.plot_data[i] = this.plot_data[i].slice(remove_idx+1);   
+                        }
+                    }
+                    Plotly.restyle('plot-' + this.plot_id, {y: this.plot_data}, indices);
+                    // Plotly.restyle('plot-' + this.plot_id, {y: this.plot_data, x: [epoch_adj]}, indices);
+                    i += 1;
                 }
-                
-                    
-        
-                Plotly.restyle('plot-' + this.plot_id, {y: this.plot_data, x: [epoch_adj]}, indices);
             }
         }
         this.data_added_since_plot = 0;
