@@ -13,7 +13,7 @@ var udp_clients = [];
 
 // creating a udp server
 var udpserver = udp.createSocket('udp4');
-var udpport = 1234;
+var udpport = 3456;
 
 
 //emits when socket is ready and listening for datagram msgs
@@ -27,7 +27,7 @@ udpserver.on('listening',function(){
 
 udpserver.on('message', (msg, rinfo) => {
     // console.log(`server got UDP msg: ${msg} from ${rinfo.address}:${rinfo.port}`);
-    console.log(`server got UDP msg of size ${msg.length}`);
+    // console.log(`Server got UDP msg of size ${msg.length}`);
     var b_found = false;
     /* Check if new client */
     udp_clients.forEach(function(client) {
@@ -47,12 +47,12 @@ udpserver.on('message', (msg, rinfo) => {
         var send_buf = Buffer.concat([ip, cat_buf, msg]);
 
         client.send(send_buf);
-        console.log("forwarding udp to ws msg " + count);
+        console.log("Forwarding UDP to WS msg " + count);
     }
     /* Forward packets to the web-socket clients */
     web_clients.forEach(forward_to_ws.bind(null, msg));
 
-    function forward_to_udp(client, msg, rinfo) {
+    function forward_to_udp(rinfo, msg, client) {
         if (rinfo['address'] != client['address'])
         {
             var ip = Buffer.from(rinfo['address']);
@@ -60,7 +60,7 @@ udpserver.on('message', (msg, rinfo) => {
             var send_buf = Buffer.concat([ip, cat_buf, msg]);
 
             udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
-            console.log("forwarding udp to udp msg " + send_buf.length);
+            console.log("Forwarding UDP " + rinfo['address'] + " to UDP " + client['address'] + " " + send_buf.length);
         }
     }
     /* Forward packets to the web-socket clients */
@@ -129,7 +129,7 @@ wsServer.on('request', function(request) {
     console.log('Connection request received.')
     web_clients.push(connection);
     connection.on('message', function(message) {      
-        console.log(`server got ws msg of size ${message.binaryData.length}`); 
+        console.log(`Server got WS msg of size ${message.binaryData.length}`); 
         web_clients.forEach(function(client) {
             if (client != connection)
             {
@@ -150,7 +150,7 @@ wsServer.on('request', function(request) {
                 var send_buf = Buffer.concat([ip, cat_buf, msg]);
     
                 udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
-                console.log("forwarding ws to udp msg " + send_buf.length);
+                console.log("Forwarding WS to UDP msg " + send_buf.length);
             }
         }
         /* Forward packets to the web-socket clients */
