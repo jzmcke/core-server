@@ -1,4 +1,6 @@
-let ws = new WebSocket('ws://192.168.50.115:8000');
+
+let ws = new WebSocket('ws://' + SERVER_IP_ADDRESS + ':' + SERVER_WEBSOCKET_PORT);
+
 ws.binaryType = 'arraybuffer';
 new_plot_id = 0;
 
@@ -133,7 +135,7 @@ class Plot
         this.indices = [];
         this.epoch_ms = [];
         this.last_data = null;
-        this.time_len_secs = 10;
+        this.time_len_secs = 5;
         this.b_relayout = false;
         this.b_trigger_relayout = false;
         var config = {'responsive': true};
