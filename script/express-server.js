@@ -16,6 +16,7 @@ async function initWASM() {
         if (result === 0) {
             wasmReady = true;
             console.log('✓ WASM blob decoder initialized (jitter buffer: 10 packets)');
+            console.log('WASM Module keys:', Object.keys(blobWasmModule));
         } else {
             console.error('✗ Failed to initialize WASM blob decoder');
         }
@@ -51,6 +52,8 @@ udpserver.on('listening', function () {
 // Process UDP packet through WASM
 function processUDPPacketThroughWASM(msg, rinfo) {
     try {
+        // console.log(`Processing ${msg.length} bytes through WASM`);
+
         // Allocate memory in WASM
         const ptr = blobWasmModule._malloc(msg.length);
         blobWasmModule.HEAPU8.set(msg, ptr);
@@ -59,16 +62,22 @@ function processUDPPacketThroughWASM(msg, rinfo) {
         const numReady = blobWasmModule.ccall('wasm_blob_process_packet', 'number',
             ['number', 'number'], [ptr, msg.length]);
 
+        // console.log(`WASM process result: ready=${numReady}`);
+
         blobWasmModule._free(ptr);
 
         // Pull and forward complete packets
-        while (blobWasmModule.ccall('wasm_blob_get_ready_count', 'number', [], []) > 0) {
+        let pulledCount = 0;
+        let loopSafety = 0;
+        while (blobWasmModule.ccall('wasm_blob_get_ready_count', 'number', [], []) > 0 && loopSafety < 20) {
+            loopSafety++;
             const sizePtr = blobWasmModule._malloc(4);
             const dataPtr = blobWasmModule.ccall('wasm_blob_pull_packet', 'number',
                 ['number'], [sizePtr]);
 
             if (dataPtr) {
                 const size = blobWasmModule.getValue(sizePtr, 'i32');
+                console.log(`WASM pulled packet: ${size} bytes`);
                 const packetData = Buffer.from(
                     blobWasmModule.HEAPU8.buffer, dataPtr, size
                 );
@@ -76,11 +85,20 @@ function processUDPPacketThroughWASM(msg, rinfo) {
                 // Forward complete blob to WebSocket clients
                 forwardCompleteBlob(packetData, rinfo);
 
-                blobWasmModule._free(dataPtr);
+                pulledCount++;
+            } else {
+                // If pull returns NULL, it likely advanced the index but found no packet.
+                // We shouldn't loop infinitely if ready_count doesn't decrease.
+                // However, C logic advances index. So we might find one next time.
+                // But let's log and maybe break to be safe if it happens too much.
+                // console.warn(`WASM pull returned NULL (attempt ${loopSafety})`);
             }
 
             blobWasmModule._free(sizePtr);
         }
+
+        if (pulledCount > 0) console.log(`Processed ${pulledCount} complete packets from WASM`);
+
     } catch (error) {
         console.error('WASM processing error:', error);
         // Fallback to raw forwarding
