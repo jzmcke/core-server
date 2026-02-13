@@ -17,7 +17,7 @@ var udpport = 3456;
 
 
 //emits when socket is ready and listening for datagram msgs
-udpserver.on('listening',function(){
+udpserver.on('listening', function () {
     var address = udpserver.address();
     var port = address.port;
     var family = address.family;
@@ -26,18 +26,15 @@ udpserver.on('listening',function(){
 });
 
 udpserver.on('message', (msg, rinfo) => {
-    // console.log(`server got UDP msg: ${msg} from ${rinfo.address}:${rinfo.port}`);
-    // console.log(`Server got UDP msg of size ${msg.length}`);
+    console.log(`server got UDP msg of size ${msg.length} from ${rinfo.address}:${rinfo.port}`);
     var b_found = false;
     /* Check if new client */
-    udp_clients.forEach(function(client) {
-        if (rinfo['address'] == client['address'])
-        {
+    udp_clients.forEach(function (client) {
+        if (rinfo['address'] == client['address']) {
             b_found = true;
         }
     });
-    if (!b_found)
-    {
+    if (!b_found) {
         udp_clients.push(rinfo)
     }
 
@@ -53,8 +50,7 @@ udpserver.on('message', (msg, rinfo) => {
     web_clients.forEach(forward_to_ws.bind(null, msg));
 
     function forward_to_udp(rinfo, msg, client) {
-        if (rinfo['address'] != client['address'])
-        {
+        if (rinfo['address'] != client['address']) {
             var ip = Buffer.from(rinfo['address']);
             var cat_buf = Buffer.alloc(128 - ip.length);
             var send_buf = Buffer.concat([ip, cat_buf, msg]);
@@ -72,12 +68,10 @@ udpserver.bind(udpport);
 server = http.createServer(function (request, response) {
 
     var filePath = '.' + request.url;
-    if ((filePath == './'))
-    {
+    if ((filePath == './')) {
         filePath = './index.html';
     }
-    else
-    {
+    else {
         filePath = './' + request.url;
     }
     var extName = path.extname(filePath);
@@ -95,44 +89,42 @@ server = http.createServer(function (request, response) {
     }
     console.log(filePath);
     fs.access(filePath, fs.constants.R_OK, (err) => {
-    
-    if (err) {
-        response.writeHead(404);
-        response.end();
-    }
-    else
-    {
-        fs.readFile(filePath, function(error, content) {
-            console.log(filePath);
-            if (error) {
-                response.writeHead(500);
-                response.end();
-            }
-            else {
-                response.writeHead(200, { 'Content-Type': contentType });
-                response.end(content, 'utf-8');
-            }
-        });
-    }
-  });
+
+        if (err) {
+            response.writeHead(404);
+            response.end();
+        }
+        else {
+            fs.readFile(filePath, function (error, content) {
+                console.log(filePath);
+                if (error) {
+                    response.writeHead(500);
+                    response.end();
+                }
+                else {
+                    response.writeHead(200, { 'Content-Type': contentType });
+                    response.end(content, 'utf-8');
+                }
+            });
+        }
+    });
 });
 
 server.listen(port, host, () => {
     console.log(`Websocket server is running on http://${host}:${port}`);
 });
 
-const wsServer = new WebSocketServer({httpServer: server})
+const wsServer = new WebSocketServer({ httpServer: server })
 
 var count = 0;
-wsServer.on('request', function(request) {
+wsServer.on('request', function (request) {
     const connection = request.accept(null, request.origin);
     console.log('Connection request received.')
     web_clients.push(connection);
-    connection.on('message', function(message) {      
-        console.log(`Server got WS msg of size ${message.binaryData.length}`); 
-        web_clients.forEach(function(client) {
-            if (client != connection)
-            {
+    connection.on('message', function (message) {
+        console.log(`Server got WS msg of size ${message.binaryData.length}`);
+        web_clients.forEach(function (client) {
+            if (client != connection) {
                 var ip = Buffer.from(connection.remoteAddress);
                 var cat_buf = Buffer.alloc(128 - ip.length);
                 var send_buf = Buffer.concat([ip, cat_buf, message.binaryData]);
@@ -143,12 +135,11 @@ wsServer.on('request', function(request) {
         });
 
         function forward_to_udp(conn, msg, client) {
-            if (conn.remoteAddress != client['address'])
-            {
+            if (conn.remoteAddress != client['address']) {
                 var ip = Buffer.from(conn.remoteAddress);
                 var cat_buf = Buffer.alloc(128 - ip.length);
                 var send_buf = Buffer.concat([ip, cat_buf, msg]);
-    
+
                 udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
                 console.log("Forwarding WS to UDP msg " + send_buf.length);
             }
@@ -158,7 +149,7 @@ wsServer.on('request', function(request) {
 
     });
 
-    connection.on('close', function(reasonCode, description) {
+    connection.on('close', function (reasonCode, description) {
         console.log('Client has disconnected.');
     });
 });
