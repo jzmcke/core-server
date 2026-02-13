@@ -3,6 +3,29 @@ var fs = require('fs');
 var path = require('path');
 var udp = require('dgram');
 
+// Load WASM blob decoder
+const BlobWASM = require('../../blob/wasm/blob_wasm.js');
+let blobWasmModule = null;
+let wasmReady = false;
+
+// Initialize WASM module
+async function initWASM() {
+    try {
+        blobWasmModule = await BlobWASM();
+        const result = blobWasmModule.ccall('wasm_blob_init', 'number', ['number'], [10]);
+        if (result === 0) {
+            wasmReady = true;
+            console.log('✓ WASM blob decoder initialized (jitter buffer: 10 packets)');
+        } else {
+            console.error('✗ Failed to initialize WASM blob decoder');
+        }
+    } catch (error) {
+        console.error('✗ Error loading WASM:', error);
+    }
+}
+
+initWASM();
+
 
 const WebSocketServer = require('websocket').server;
 var port = 8000;
@@ -25,30 +48,95 @@ udpserver.on('listening', function () {
     console.log(`UDP server is running on http://${ipaddr}:${port}`);
 });
 
+// Process UDP packet through WASM
+function processUDPPacketThroughWASM(msg, rinfo) {
+    try {
+        // Allocate memory in WASM
+        const ptr = blobWasmModule._malloc(msg.length);
+        blobWasmModule.HEAPU8.set(msg, ptr);
+
+        // Push packet to jitter buffer
+        const numReady = blobWasmModule.ccall('wasm_blob_process_packet', 'number',
+            ['number', 'number'], [ptr, msg.length]);
+
+        blobWasmModule._free(ptr);
+
+        // Pull and forward complete packets
+        while (blobWasmModule.ccall('wasm_blob_get_ready_count', 'number', [], []) > 0) {
+            const sizePtr = blobWasmModule._malloc(4);
+            const dataPtr = blobWasmModule.ccall('wasm_blob_pull_packet', 'number',
+                ['number'], [sizePtr]);
+
+            if (dataPtr) {
+                const size = blobWasmModule.getValue(sizePtr, 'i32');
+                const packetData = Buffer.from(
+                    blobWasmModule.HEAPU8.buffer, dataPtr, size
+                );
+
+                // Forward complete blob to WebSocket clients
+                forwardCompleteBlob(packetData, rinfo);
+
+                blobWasmModule._free(dataPtr);
+            }
+
+            blobWasmModule._free(sizePtr);
+        }
+    } catch (error) {
+        console.error('WASM processing error:', error);
+        // Fallback to raw forwarding
+        forwardRawPacketToWebSocket(msg, rinfo);
+    }
+}
+
+// Forward complete defragmented blob to WebSocket clients
+function forwardCompleteBlob(blobData, rinfo) {
+    const ip = Buffer.from(rinfo['address']);
+    const cat_buf = Buffer.alloc(128 - ip.length);
+    const send_buf = Buffer.concat([ip, cat_buf, blobData]);
+
+    web_clients.forEach(client => {
+        client.send(send_buf);
+    });
+
+    console.log(`→ WS: Complete blob (${blobData.length} bytes) to ${web_clients.length} clients`);
+}
+
+// Fallback: forward raw packet without defragmentation
+function forwardRawPacketToWebSocket(msg, rinfo) {
+    const ip = Buffer.from(rinfo['address']);
+    const cat_buf = Buffer.alloc(128 - ip.length);
+    const send_buf = Buffer.concat([ip, cat_buf, msg]);
+
+    web_clients.forEach(client => {
+        client.send(send_buf);
+    });
+
+    console.log(`→ WS: Raw packet (${msg.length} bytes, no WASM)`);
+}
+
 udpserver.on('message', (msg, rinfo) => {
-    console.log(`server got UDP msg of size ${msg.length} from ${rinfo.address}:${rinfo.port}`);
+    console.log(`UDP ← ${msg.length} bytes from ${rinfo.address}:${rinfo.port}`);
+
+    // Track UDP clients
     var b_found = false;
-    /* Check if new client */
     udp_clients.forEach(function (client) {
         if (rinfo['address'] == client['address']) {
             b_found = true;
         }
     });
     if (!b_found) {
-        udp_clients.push(rinfo)
+        udp_clients.push(rinfo);
+        console.log(`  New UDP client: ${rinfo.address}:${rinfo.port}`);
     }
 
-    function forward_to_ws(msg, client) {
-        var ip = Buffer.from(rinfo['address']);
-        var cat_buf = Buffer.alloc(128 - ip.length);
-        var send_buf = Buffer.concat([ip, cat_buf, msg]);
-
-        client.send(send_buf);
-        console.log("Forwarding UDP to WS msg " + count);
+    // Process through WASM if ready, otherwise fallback
+    if (wasmReady) {
+        processUDPPacketThroughWASM(msg, rinfo);
+    } else {
+        forwardRawPacketToWebSocket(msg, rinfo);
     }
-    /* Forward packets to the web-socket clients */
-    web_clients.forEach(forward_to_ws.bind(null, msg));
 
+    // Forward to other UDP clients
     function forward_to_udp(rinfo, msg, client) {
         if (rinfo['address'] != client['address']) {
             var ip = Buffer.from(rinfo['address']);
@@ -56,10 +144,9 @@ udpserver.on('message', (msg, rinfo) => {
             var send_buf = Buffer.concat([ip, cat_buf, msg]);
 
             udpserver.send(send_buf, 0, send_buf.length, client['port'], client['address']);
-            console.log("Forwarding UDP " + rinfo['address'] + " to UDP " + client['address'] + " " + send_buf.length);
+            console.log(`  UDP → ${client['address']}: ${send_buf.length} bytes`);
         }
     }
-    /* Forward packets to the web-socket clients */
     udp_clients.forEach(forward_to_udp.bind(null, rinfo, msg));
 });
 
